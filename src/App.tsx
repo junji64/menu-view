@@ -20,7 +20,8 @@ import {
   X,
   ArrowUp,
   Image as ImageIcon,
-  KeyRound
+  KeyRound,
+  Settings
 } from 'lucide-react';
 import {
   MenuAnalysisResult,
@@ -503,6 +504,15 @@ export default function App() {
                   <span>같은 사진으로 다시 분석하기</span>
                 </button>
               )}
+
+              <button
+                id="open-settings-from-error-btn"
+                onClick={() => setIsAdminModalOpen(true)}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                <span>API Key / 모델 설정</span>
+              </button>
 
               <button
                 id="reupload-analysis-btn"

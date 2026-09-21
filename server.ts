@@ -48,7 +48,9 @@ const CANDIDATE_MODELS = [
 function getGeminiClient(customKey?: string): GoogleGenAI {
   const apiKey = customKey?.trim() || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY가 설정되어 있지 않습니다. 관리자 설정에서 LLM API KEY를 등록해 주세요.");
+    throw new Error(
+      "GEMINI_API_KEY가 서버(Vercel 환경변수)에 설정되어 있지 않습니다. Vercel 대시보드(Settings > Environment Variables)에 GEMINI_API_KEY를 추가하시거나, 화면 우측 상단 '관리자 설정(⚙️)'에서 직접 API Key를 입력해 주세요."
+    );
   }
   return new GoogleGenAI({
     apiKey,
@@ -174,6 +176,100 @@ async function analyzeMenuWithOpenAI(
 app.get(["/api/health", "/health"], (req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
+
+// Robust JSON parser that handles markdown code-blocks and repairs cut-off/truncated outputs
+function parseOrRepairJSON(raw: string): any {
+  if (!raw || typeof raw !== "string") {
+    throw new Error("AI 모델로부터 빈 응답을 수신했습니다.");
+  }
+
+  const cleaned = raw
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  // 1. Direct JSON parse attempt
+  try {
+    return JSON.parse(cleaned);
+  } catch (initialErr) {
+    // 2. Substring between first { and last }
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+      } catch {
+        // Continue to partial repair
+      }
+    }
+
+    // 3. Repair cut-off JSON (e.g., token limit reached mid-array)
+    let text = firstBrace !== -1 ? cleaned.substring(firstBrace) : cleaned;
+    text = text.replace(/,\s*$/, "");
+
+    let openBraces = 0;
+    let openBrackets = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === "{") openBraces++;
+        else if (char === "}") openBraces = Math.max(0, openBraces - 1);
+        else if (char === "[") openBrackets++;
+        else if (char === "]") openBrackets = Math.max(0, openBrackets - 1);
+      }
+    }
+
+    if (inString) text += '"';
+
+    const lastCompleteObj = text.lastIndexOf("}");
+    if (lastCompleteObj !== -1 && openBraces > 0) {
+      text = text.substring(0, lastCompleteObj + 1);
+      openBraces = 0;
+      openBrackets = 0;
+      inString = false;
+      escaped = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (escaped) { escaped = false; continue; }
+        if (c === "\\") { escaped = true; continue; }
+        if (c === '"') { inString = !inString; continue; }
+        if (!inString) {
+          if (c === "{") openBraces++;
+          else if (c === "}") openBraces = Math.max(0, openBraces - 1);
+          else if (c === "[") openBrackets++;
+          else if (c === "]") openBrackets = Math.max(0, openBrackets - 1);
+        }
+      }
+    }
+
+    while (openBrackets > 0) {
+      text += "]";
+      openBrackets--;
+    }
+    while (openBraces > 0) {
+      text += "}";
+      openBraces--;
+    }
+
+    return JSON.parse(text);
+  }
+}
 
 // Endpoint: Analyze Menu Image
 app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Response) => {
@@ -406,23 +502,10 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
 
     let parsedData: any;
     try {
-      // Strip possible markdown code blocks if model returned them
-      const cleaned = textOutput
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/\s*```$/i, "")
-        .trim();
-      parsedData = JSON.parse(cleaned);
+      parsedData = parseOrRepairJSON(textOutput);
     } catch (parseErr) {
       console.error("JSON parsing error:", parseErr, "Raw output:", textOutput);
-      // Fallback: search for first { and last }
-      const firstBrace = textOutput.indexOf("{");
-      const lastBrace = textOutput.lastIndexOf("}");
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        parsedData = JSON.parse(textOutput.substring(firstBrace, lastBrace + 1));
-      } else {
-        throw new Error("메뉴 데이터 형식을 변환할 수 없습니다.");
-      }
+      throw new Error("메뉴 데이터 형식을 변환할 수 없습니다. 사진이 흐리거나 인식이 어려울 수 있으니 선명한 사진으로 다시 시도해 주세요.");
     }
 
     // Determine & calibrate exchange rate
@@ -499,9 +582,37 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
     });
   } catch (error: any) {
     console.error("Error analyzing menu:", error);
-    return res.status(500).json({
+    const msg = error?.message || "메뉴판을 분석하는 도중 오류가 발생했습니다. 사진을 다시 올려주세요.";
+    const isApiKeyError =
+      msg.includes("GEMINI_API_KEY") ||
+      msg.includes("OPENAI_API_KEY") ||
+      msg.includes("API Key") ||
+      msg.includes("API_KEY_INVALID") ||
+      msg.includes("API key not valid");
+    const isHighDemand =
+      msg.includes("503") ||
+      msg.includes("UNAVAILABLE") ||
+      msg.includes("high demand") ||
+      msg.includes("Resource has been exhausted") ||
+      msg.includes("429");
+
+    let statusCode = 500;
+    let userFriendlyMsg = msg;
+
+    if (isApiKeyError) {
+      statusCode = 400;
+      userFriendlyMsg = msg.includes("Vercel")
+        ? msg
+        : `${msg} (Vercel 환경변수에 GEMINI_API_KEY를 추가하거나 웹화면 우측 상단 '관리자 설정⚙️'에서 직접 입력해 주세요.)`;
+    } else if (isHighDemand) {
+      statusCode = 503;
+      userFriendlyMsg =
+        "현재 AI 모델 서버가 일시적으로 매우 혼잡합니다. 잠시 후 다시 시도하시거나, 우측 상단 관리자 설정(⚙️)에서 다른 모델(gemini-3.1-flash-lite 또는 OpenAI)을 선택해 주세요.";
+    }
+
+    return res.status(statusCode).json({
       success: false,
-      error: error.message || "메뉴판을 분석하는 도중 오류가 발생했습니다. 사진을 다시 올려주세요.",
+      error: userFriendlyMsg,
     });
   }
 });

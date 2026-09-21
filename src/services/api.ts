@@ -165,8 +165,38 @@ export async function analyzeMenuImage(
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `서버 오류 (${response.status}): 메뉴를 분석하지 못했습니다.`);
+    let errorMsg = '';
+    try {
+      const errorData = await response.json();
+      if (typeof errorData.error === 'string' && errorData.error) {
+        errorMsg = errorData.error;
+      } else if (errorData.error?.message) {
+        errorMsg = errorData.error.message;
+      } else if (errorData.error?.code === 'FUNCTION_INVOCATION_FAILED') {
+        errorMsg =
+          'Vercel 서버리스 함수 실행 오류 (FUNCTION_INVOCATION_FAILED): Vercel 환경 변수에 GEMINI_API_KEY가 등록되어 있는지 확인해 주세요. 또는 우측 상단 관리자 설정(⚙️)에서 직접 API Key를 입력할 수 있습니다.';
+      } else if (typeof errorData.message === 'string' && errorData.message) {
+        errorMsg = errorData.message;
+      }
+    } catch {
+      // Body wasn't JSON
+    }
+
+    if (!errorMsg) {
+      if (response.status === 504) {
+        errorMsg =
+          '서버 응답 시간이 초과되었습니다 (타임아웃). 메뉴판 사진을 조금 더 가깝게 촬영하시거나 잠시 후 다시 시도해 주세요.';
+      } else if (response.status === 413) {
+        errorMsg = '이미지 용량이 너무 큽니다. 사진 크기를 줄여서 다시 시도해 주세요.';
+      } else if (response.status === 500) {
+        errorMsg =
+          '서버 오류 (500): AI 모델을 호출하지 못했습니다. 우측 상단 관리자 설정(⚙️)에서 직접 Gemini API Key 또는 OpenAI API Key를 등록해 주세요.';
+      } else {
+        errorMsg = `서버 오류 (${response.status}): 메뉴를 분석하지 못했습니다.`;
+      }
+    }
+
+    throw new Error(errorMsg);
   }
 
   const result = await response.json();
