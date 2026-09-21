@@ -1,10 +1,10 @@
-// server.ts
+// api/index.ts
 import express from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
-// src/services/foodImageFinder.ts
+// api/foodImageFinder.ts
 var CULINARY_PHOTO_DATABASE = {
   // Thai & Southeast Asian (Original Native + Romanized)
   "\u0E1C\u0E31\u0E14\u0E44\u0E17\u0E22": "https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=800&q=80",
@@ -238,7 +238,7 @@ async function findRepresentativeFoodImage(originalName, koreanName, category = 
   return "";
 }
 
-// server.ts
+// api/index.ts
 dotenv.config();
 var app = express();
 var PORT = 3e3;
@@ -921,10 +921,13 @@ async function startServer() {
     console.log(`\u{1F680} Server running on http://0.0.0.0:${PORT}`);
   });
 }
+var api_default = app;
+
+// server.ts
 if (!process.env.VERCEL) {
   startServer();
 }
-var server_default = app;
+var server_default = api_default;
 export {
   server_default as default
 };
