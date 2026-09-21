@@ -1,0 +1,10 @@
+{
+  "name": "다국어 메뉴 번역기 및 음식 비주얼 가이드 (Menu Visual Guide)",
+  "description": "메뉴판 사진을 촬영하거나 업로드하면 어떤 언어의 메뉴든 한글 이름과 상세 설명, 대표 음식 이미지를 함께 제공하는 스마트 번역 가이드",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
