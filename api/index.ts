@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
-import { findRepresentativeFoodImage } from "./foodImageFinder";
+import { findRepresentativeFoodImage } from "./_foodImageFinder";
 
 dotenv.config();
 
