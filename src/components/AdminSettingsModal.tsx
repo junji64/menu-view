@@ -34,25 +34,25 @@ interface AdminSettingsModalProps {
 
 const GEMINI_MODELS: LLMModelOption[] = [
   {
-    id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash',
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
     provider: 'gemini',
-    description: '최신 표준 모델로 안정적이며 번역 및 시각 분석 능력이 탁월합니다.',
+    description: '최신 플래시 모델로 심층 추론 및 다국어 메뉴판 시각 분석 능력이 가장 탁월합니다.',
     badge: '추천',
   },
   {
     id: 'gemini-3.1-flash-lite',
     name: 'Gemini 3.1 Flash-Lite',
     provider: 'gemini',
-    description: '초경량 초고속 모델로 빠른 응답 속도를 자랑합니다.',
-    badge: '빠름',
+    description: '초경량 초고속 모델로 매우 빠른 응답 속도를 제공합니다.',
+    badge: '초고속',
   },
   {
-    id: 'gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash',
+    id: 'gemini-flash-latest',
+    name: 'Gemini Flash Latest',
     provider: 'gemini',
-    description: '차세대 플래시 모델로 심층 추론 및 복잡한 손글씨 메뉴판에 최적화되어 있습니다.',
-    badge: '고지능',
+    description: '항상 최신 버전의 Flash 모델을 자동으로 적용합니다.',
+    badge: '안정',
   },
 ];
 

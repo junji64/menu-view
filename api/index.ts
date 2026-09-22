@@ -2,7 +2,6 @@ import express, { Request, Response } from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
-import { findRepresentativeFoodImage } from "./_foodImageFinder";
 
 dotenv.config();
 
@@ -12,6 +11,17 @@ const PORT = 3000;
 // Set high payload limit for base64 photos from camera/file upload
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// Normalize request URL for Vercel Serverless Function rewrites
+app.use((req, res, next) => {
+  const matchedPath = (req.headers["x-vercel-matched-path"] || req.headers["x-now-route-matches"]) as string;
+  if (matchedPath && matchedPath.startsWith("/api") && req.url !== matchedPath) {
+    req.url = matchedPath;
+  } else if (req.url.startsWith("/api/index.ts")) {
+    req.url = req.url.replace(/^\/api\/index\.ts/, "") || "/";
+  }
+  next();
+});
 
 // Standard current exchange rates against KRW (Korean Won)
 const STANDARD_EXCHANGE_RATES: Record<string, number> = {
@@ -38,11 +48,108 @@ const STANDARD_EXCHANGE_RATES: Record<string, number> = {
 
 // Priority candidate models to bypass 503 high demand spikes with fallback
 const CANDIDATE_MODELS = [
-  "gemini-3.6-flash",
-  "gemini-3.1-flash-lite",
   "gemini-3.8-flash",
+  "gemini-3.1-flash-lite",
   "gemini-flash-latest",
 ];
+
+// Curated authentic culinary image library for instant 0ms matching
+const CULINARY_PHOTO_DATABASE: Record<string, string> = {
+  // Southeast Asian & Thai
+  'ผัดไทย': 'https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=800&q=80',
+  'pad thai': 'https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=800&q=80',
+  '팟타이': 'https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=800&q=80',
+  'ต้มยำ': 'https://images.unsplash.com/photo-1548946526-f69e2424cf45?auto=format&fit=crop&w=800&q=80',
+  'tom yum': 'https://images.unsplash.com/photo-1548946526-f69e2424cf45?auto=format&fit=crop&w=800&q=80',
+  '똠얌': 'https://images.unsplash.com/photo-1548946526-f69e2424cf45?auto=format&fit=crop&w=800&q=80',
+  'curry': 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=800&q=80',
+  '커리': 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=800&q=80',
+  'som tum': 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=800&q=80',
+  '쏨땀': 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=800&q=80',
+  'pho': 'https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?auto=format&fit=crop&w=800&q=80',
+  '쌀국수': 'https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?auto=format&fit=crop&w=800&q=80',
+  'banh mi': 'https://images.unsplash.com/photo-1626804475297-41608ea09aeb?auto=format&fit=crop&w=800&q=80',
+  '반미': 'https://images.unsplash.com/photo-1626804475297-41608ea09aeb?auto=format&fit=crop&w=800&q=80',
+  'spring roll': 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80',
+  '스프링롤': 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80',
+  // Italian & European
+  'carbonara': 'https://images.unsplash.com/photo-1612874742237-6526221588e3?auto=format&fit=crop&w=800&q=80',
+  '까르보나라': 'https://images.unsplash.com/photo-1612874742237-6526221588e3?auto=format&fit=crop&w=800&q=80',
+  'pasta': 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80',
+  '파스타': 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80',
+  'spaghetti': 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80',
+  '스파게티': 'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80',
+  'pizza': 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80',
+  '피자': 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80',
+  'risotto': 'https://images.unsplash.com/photo-1633964913295-ceb43826e7c9?auto=format&fit=crop&w=800&q=80',
+  '리조또': 'https://images.unsplash.com/photo-1633964913295-ceb43826e7c9?auto=format&fit=crop&w=800&q=80',
+  'tiramisu': 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?auto=format&fit=crop&w=800&q=80',
+  '티라미수': 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?auto=format&fit=crop&w=800&q=80',
+  'steak': 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
+  '스테이크': 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
+  'paella': 'https://images.unsplash.com/photo-1534080564583-6be75777b70a?auto=format&fit=crop&w=800&q=80',
+  '빠에야': 'https://images.unsplash.com/photo-1534080564583-6be75777b70a?auto=format&fit=crop&w=800&q=80',
+  // Japanese
+  'sushi': 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80',
+  '초밥': 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=800&q=80',
+  'sashimi': 'https://images.unsplash.com/photo-1534482421-64566f976cfa?auto=format&fit=crop&w=800&q=80',
+  '사시미': 'https://images.unsplash.com/photo-1534482421-64566f976cfa?auto=format&fit=crop&w=800&q=80',
+  'ramen': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=800&q=80',
+  '라멘': 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=800&q=80',
+  'udon': 'https://images.unsplash.com/photo-1618841557871-b4664fbf0cb3?auto=format&fit=crop&w=800&q=80',
+  '우동': 'https://images.unsplash.com/photo-1618841557871-b4664fbf0cb3?auto=format&fit=crop&w=800&q=80',
+  'tempura': 'https://images.unsplash.com/photo-1615361200141-f45040f367be?auto=format&fit=crop&w=800&q=80',
+  '튀김': 'https://images.unsplash.com/photo-1615361200141-f45040f367be?auto=format&fit=crop&w=800&q=80',
+  'unagi': 'https://images.unsplash.com/photo-1553621042-f6e147245754?auto=format&fit=crop&w=800&q=80',
+  '장어': 'https://images.unsplash.com/photo-1553621042-f6e147245754?auto=format&fit=crop&w=800&q=80',
+  'tonkatsu': 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&w=800&q=80',
+  '돈까스': 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&w=800&q=80',
+  '돈카츠': 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&w=800&q=80',
+  'yakitori': 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+  '야키토리': 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+  'soba': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80',
+  '소바': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80',
+  // Chinese
+  'dim sum': 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?auto=format&fit=crop&w=800&q=80',
+  '딤섬': 'https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?auto=format&fit=crop&w=800&q=80',
+  'dumpling': 'https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=800&q=80',
+  '만두': 'https://images.unsplash.com/photo-1496116218417-1a781b1c416c?auto=format&fit=crop&w=800&q=80',
+  'peking duck': 'https://images.unsplash.com/photo-1514944298352-78d128df61cb?auto=format&fit=crop&w=800&q=80',
+  '북경오리': 'https://images.unsplash.com/photo-1514944298352-78d128df61cb?auto=format&fit=crop&w=800&q=80',
+  'fried rice': 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=800&q=80',
+  '볶음밥': 'https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=800&q=80',
+  'mapo tofu': 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+  '마파두부': 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+  'hot pot': 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=800&q=80',
+  '훠궈': 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=800&q=80',
+  // Western & Drinks
+  'burger': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80',
+  '버거': 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80',
+  'taco': 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80',
+  '타코': 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80',
+  'salad': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80',
+  '샐러드': 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80',
+  'soup': 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=800&q=80',
+  '스프': 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=800&q=80',
+  'dessert': 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80',
+  '디저트': 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80',
+  'coffee': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=800&q=80',
+  '커피': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=800&q=80',
+  'beer': 'https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=800&q=80',
+  '맥주': 'https://images.unsplash.com/photo-1608270586620-248524c67de9?auto=format&fit=crop&w=800&q=80',
+  'wine': 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=800&q=80',
+  '와인': 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=800&q=80',
+};
+
+function matchCuratedPhoto(name1: string = "", name2: string = ""): string {
+  const target = `${name1} ${name2}`.toLowerCase();
+  for (const [key, url] of Object.entries(CULINARY_PHOTO_DATABASE)) {
+    if (target.includes(key.toLowerCase())) {
+      return url;
+    }
+  }
+  return "";
+}
 
 // Lazy GoogleGenAI client with custom admin API key support
 function getGeminiClient(customKey?: string): GoogleGenAI {
@@ -555,21 +662,10 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
             dish.koreanDescription = `${dish.koreanName || dish.originalName}은(는) 현지 식당에서 사랑받는 대표적인 메뉴입니다. ${ingText} 기호에 맞춰 소스나 곁들임 메뉴와 함께 즐기시면 더욱 맛있습니다.`;
           }
 
-          // 5. Assign authentic representative food image only if a genuine match exists
+          // 5. Assign authentic representative food image only if a genuine curated match exists
           // User preference: if no appropriate image is found, keep it as no-image ("")
           if (!dish.imageUrl || dish.imageUrl.trim() === "") {
-            try {
-              const matchedImg = await findRepresentativeFoodImage(
-                dish.originalName || "",
-                dish.koreanName || "",
-                dish.category || "",
-                index
-              );
-              dish.imageUrl = matchedImg || "";
-            } catch (imgErr) {
-              console.warn(`[Image Finder Warning] Could not find image for ${dish.koreanName}:`, imgErr);
-              dish.imageUrl = "";
-            }
+            dish.imageUrl = matchCuratedPhoto(dish.originalName, dish.koreanName) || "";
           }
         })
       );
@@ -622,9 +718,8 @@ app.get(["/api/search-food-image", "/search-food-image"], async (req: Request, r
   try {
     const originalName = (req.query.original as string) || "";
     const koreanName = (req.query.ko as string) || (req.query.q as string) || "";
-    const category = (req.query.cat as string) || "";
 
-    const imageUrl = await findRepresentativeFoodImage(originalName, koreanName, category, 0);
+    const imageUrl = matchCuratedPhoto(originalName, koreanName);
     return res.json({ success: true, imageUrl });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });

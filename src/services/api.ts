@@ -60,9 +60,9 @@ export function getAdminPreferredModel(targetProvider?: LLMProvider): string {
     if (provider === 'openai') {
       return localStorage.getItem(ADMIN_OPENAI_MODEL_STORAGE) || 'gpt-4o';
     }
-    return localStorage.getItem(ADMIN_GEMINI_MODEL_STORAGE) || 'gemini-3.6-flash';
+    return localStorage.getItem(ADMIN_GEMINI_MODEL_STORAGE) || 'gemini-3.8-flash';
   } catch {
-    return targetProvider === 'openai' ? 'gpt-4o' : 'gemini-3.6-flash';
+    return targetProvider === 'openai' ? 'gpt-4o' : 'gemini-3.8-flash';
   }
 }
 
@@ -167,7 +167,7 @@ export async function analyzeMenuImage(
   if (!response.ok) {
     let errorMsg = '';
     try {
-      const errorData = await response.json();
+      const errorData = await response.clone().json();
       if (typeof errorData.error === 'string' && errorData.error) {
         errorMsg = errorData.error;
       } else if (errorData.error?.message) {
@@ -179,7 +179,25 @@ export async function analyzeMenuImage(
         errorMsg = errorData.message;
       }
     } catch {
-      // Body wasn't JSON
+      // Body wasn't JSON - try to extract text from response
+      try {
+        const rawText = await response.text();
+        if (rawText) {
+          if (rawText.includes('FUNCTION_INVOCATION_FAILED')) {
+            errorMsg =
+              '서버리스 함수 실행 오류 (FUNCTION_INVOCATION_FAILED): Vercel 환경 변수(Settings > Environment Variables)에 GEMINI_API_KEY를 등록하시거나 우측 상단 관리자 설정(⚙️)에서 직접 API Key를 입력해 주세요.';
+          } else if (rawText.includes('FUNCTION_INVOCATION_TIMEOUT') || rawText.includes('Task timed out')) {
+            errorMsg =
+              '서버 응답 시간 초과: 메뉴판 분석 시간이 초과되었습니다. 선명한 사진으로 다시 시도해 주세요.';
+          } else if (rawText.includes('PAYLOAD_TOO_LARGE')) {
+            errorMsg = '사진 용량이 너무 큽니다. 사진 크기를 줄여서 다시 시도해 주세요.';
+          } else if (rawText.length < 200 && !rawText.includes('<html')) {
+            errorMsg = rawText.trim();
+          }
+        }
+      } catch {
+        // ignore
+      }
     }
 
     if (!errorMsg) {
