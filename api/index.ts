@@ -169,11 +169,12 @@ function getGeminiClient(customKey?: string): GoogleGenAI {
   });
 }
 
-// Resilient model invocation with retry and automatic model fallback cascade
+// Resilient model invocation with retry, model cascade, and automatic fallback to system key if custom key is invalid
 async function generateContentWithRetryAndFallback(
   ai: GoogleGenAI,
   requestConfig: any,
-  preferredModels: string[] = CANDIDATE_MODELS
+  preferredModels: string[] = CANDIDATE_MODELS,
+  customKeyUsed?: string
 ): Promise<{ text: string; modelUsed: string }> {
   let lastError: any = null;
 
@@ -195,6 +196,37 @@ async function generateContentWithRetryAndFallback(
         lastError = err;
         const msg = err?.message || String(err);
         console.warn(`[Gemini Warning] Model '${model}' round ${round} failed: ${msg}`);
+
+        // If custom key failed due to invalid API key/auth error, and system key exists, fall back to system key
+        if (
+          customKeyUsed &&
+          process.env.GEMINI_API_KEY &&
+          customKeyUsed !== process.env.GEMINI_API_KEY &&
+          (msg.includes("API key not valid") ||
+            msg.includes("API_KEY_INVALID") ||
+            msg.includes("400") ||
+            msg.includes("401") ||
+            msg.includes("403") ||
+            msg.includes("PERMISSION_DENIED"))
+        ) {
+          console.warn("[Gemini Auth Fallback] Custom API key rejected. Falling back to default system key...");
+          try {
+            const fallbackAi = new GoogleGenAI({
+              apiKey: process.env.GEMINI_API_KEY,
+              httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+            });
+            const fallbackRes = await fallbackAi.models.generateContent({
+              ...requestConfig,
+              model: "gemini-3.1-flash-lite",
+            });
+            if (fallbackRes?.text) {
+              console.log("[Gemini Fallback Success] Succeeded using system GEMINI_API_KEY");
+              return { text: fallbackRes.text, modelUsed: "gemini-3.1-flash-lite (시스템 키)" };
+            }
+          } catch (fallbackErr) {
+            console.error("[Gemini Fallback Error]:", fallbackErr);
+          }
+        }
 
         // If 404, continue immediately to next model
         if (msg.includes("404") || msg.includes("NOT_FOUND")) {
@@ -602,7 +634,12 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
         : CANDIDATE_MODELS;
 
       // Use multi-model retry & fallback cascade to prevent 503 errors
-      const geminiResult = await generateContentWithRetryAndFallback(ai, requestConfig, modelsToUse);
+      const geminiResult = await generateContentWithRetryAndFallback(
+        ai,
+        requestConfig,
+        modelsToUse,
+        customApiKey
+      );
       textOutput = geminiResult.text;
       modelUsed = geminiResult.modelUsed;
     }
@@ -810,9 +847,37 @@ app.post(["/api/admin/verify-key", "/admin/verify-key"], async (req: Request, re
     });
   } catch (err: any) {
     console.error("[Admin Test Error]:", err);
+    let userFriendlyError = err.message || "API Key가 유효하지 않거나 권한이 없습니다.";
+
+    if (
+      userFriendlyError.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED") ||
+      userFriendlyError.includes("UNAUTHENTICATED") ||
+      userFriendlyError.includes("invalid authentication credentials") ||
+      userFriendlyError.includes("API key not valid") ||
+      userFriendlyError.includes("API_KEY_INVALID") ||
+      userFriendlyError.includes("400") ||
+      userFriendlyError.includes("401") ||
+      userFriendlyError.includes("INVALID_ARGUMENT")
+    ) {
+      userFriendlyError =
+        "입력하신 키는 Google AI Studio의 정식 Gemini API Key가 아닙니다 (OAuth 세션 토큰 또는 미지원 인증 형식). Gemini API 키는 보통 'AIzaSy'로 시작하며, Google AI Studio(https://aistudio.google.com/app/apikey)에서 무료로 발급받으실 수 있습니다.";
+    } else if (
+      userFriendlyError.includes("PERMISSION_DENIED") ||
+      userFriendlyError.includes("403")
+    ) {
+      userFriendlyError =
+        "API Key 접근 권한이 없습니다(403). Google AI Studio에서 키의 API 활성화 상태 및 권한을 확인해 주세요.";
+    } else if (
+      userFriendlyError.includes("RESOURCE_EXHAUSTED") ||
+      userFriendlyError.includes("429")
+    ) {
+      userFriendlyError =
+        "해당 API Key의 요청 한도(Quota/Rate limit)를 초과했습니다. 잠시 후 다시 시도하거나 다른 모델을 선택해 주세요.";
+    }
+
     return res.status(401).json({
       success: false,
-      error: err.message || "API Key가 유효하지 않거나 권한이 없습니다.",
+      error: userFriendlyError,
     });
   }
 });

@@ -368,7 +368,13 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
                     ? 'sk-proj-... 또는 sk-...'
                     : 'AIzaSy... (Gemini API Key)'
                 }
-                className="w-full bg-stone-950 border border-stone-700 rounded-xl px-4 py-3 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500 pr-20 font-mono"
+                className={`w-full bg-stone-950 border rounded-xl px-4 py-3 text-sm text-stone-100 placeholder-stone-500 focus:outline-none focus:border-emerald-500 pr-20 font-mono transition ${
+                  selectedProvider === 'gemini' &&
+                  currentKeyInput.trim() &&
+                  !currentKeyInput.trim().startsWith('AIzaSy')
+                    ? 'border-amber-600/70 focus:border-amber-500'
+                    : 'border-stone-700'
+                }`}
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 <button
@@ -382,6 +388,33 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Key format hint warning */}
+            {selectedProvider === 'gemini' &&
+              currentKeyInput.trim() &&
+              !currentKeyInput.trim().startsWith('AIzaSy') && (
+                <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-600/40 text-[11px] text-amber-300 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-amber-200">
+                      Google AI Studio API Key 형식이 아닐 수 있습니다.
+                    </p>
+                    <p className="text-stone-300 leading-relaxed">
+                      Google Gemini API Key는 보통 <code className="bg-stone-900 px-1 py-0.5 rounded text-amber-300 font-mono">AIzaSy...</code>로 시작합니다.{' '}
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline text-emerald-400 hover:text-emerald-300"
+                      >
+                        Google AI Studio
+                      </a>
+                      에서 무료로 새 키를 발급받으시거나, 아래 [키 삭제]를 눌러 <strong>시스템 기본 서버 키</strong>를 이용하실 수 있습니다.
+                    </p>
+                  </div>
+                </div>
+              )}
+
             <p className="text-[11px] text-stone-400">
               * 입력된 API 키는 브라우저 로컬 저장소에 암호화되어 보관되며, AI 요청 시에만 서버 헤더를 통해 안전하게 전달됩니다.
             </p>
@@ -444,7 +477,35 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
               ) : (
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               )}
-              <div className="flex-1 font-medium">{verifyResult.message}</div>
+              <div className="flex-1 space-y-2">
+                <div className="font-medium leading-relaxed">{verifyResult.message}</div>
+                {!verifyResult.success && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-800/40">
+                    <a
+                      href={
+                        selectedProvider === 'openai'
+                          ? 'https://platform.openai.com/api-keys'
+                          : 'https://aistudio.google.com/app/apikey'
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-rose-900/80 hover:bg-rose-800 text-rose-100 text-[11px] font-semibold border border-rose-500/50 flex items-center gap-1 transition"
+                    >
+                      <span>{selectedProvider === 'openai' ? 'OpenAI 키 발급받기' : 'Google AI Studio 키 발급받기'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                    {hasCurrentCustomKey && (
+                      <button
+                        type="button"
+                        onClick={handleClearCurrentKey}
+                        className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-[11px] border border-stone-600 transition"
+                      >
+                        기본 시스템 키 사용 (초기화)
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
