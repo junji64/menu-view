@@ -21,14 +21,25 @@ import {
   ArrowUp,
   Image as ImageIcon,
   KeyRound,
-  Settings
+  Settings,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Smartphone
 } from 'lucide-react';
 import {
   MenuAnalysisResult,
   DishItem,
   OrderItem,
 } from './types';
-import { analyzeMenuImage, speakText, getAdminApiKey } from './services/api';
+import {
+  analyzeMenuImage,
+  speakText,
+  getAdminApiKey,
+  setAdminApiKey,
+  setAdminProvider,
+  syncApiKeyFromUrl,
+} from './services/api';
 import { CameraCapture } from './components/CameraCapture';
 import { FileUpload } from './components/FileUpload';
 import { DishCard } from './components/DishCard';
@@ -66,9 +77,21 @@ export default function App() {
   const [favoriteDishIds, setFavoriteDishIds] = useState<Set<string>>(new Set());
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [hasCustomApiKey, setHasCustomApiKey] = useState(false);
+  const [inlineApiKey, setInlineApiKey] = useState('');
+  const [showInlineKey, setShowInlineKey] = useState(false);
+  const [showVercelGuide, setShowVercelGuide] = useState(false);
+  const [keyToast, setKeyToast] = useState<string | null>(null);
 
   useEffect(() => {
-    setHasCustomApiKey(Boolean(getAdminApiKey()));
+    // 1. Detect if API key was passed via URL hash / query (e.g. from QR code or mobile sync link)
+    const syncRes = syncApiKeyFromUrl();
+    if (syncRes.synced) {
+      setHasCustomApiKey(true);
+      setKeyToast('📱 모바일 기기에 Gemini API Key가 성공적으로 연동되었습니다! 메뉴판 사진을 촬영해 보세요.');
+      setTimeout(() => setKeyToast(null), 6000);
+    } else {
+      setHasCustomApiKey(Boolean(getAdminApiKey()));
+    }
   }, []);
 
   // Refs for auto-scroll
@@ -375,6 +398,26 @@ export default function App() {
 
       {/* Main Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-8">
+        {/* Mobile Key Sync Success Toast */}
+        {keyToast && (
+          <div
+            id="mobile-key-sync-toast"
+            className="p-4 rounded-2xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 text-xs font-semibold flex items-center justify-between gap-3 shadow-lg"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-900 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-300">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <span>{keyToast}</span>
+            </div>
+            <button
+              onClick={() => setKeyToast(null)}
+              className="p-1.5 rounded-lg text-emerald-400 hover:text-emerald-100 hover:bg-emerald-900/60 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {/* Upload & Camera Section */}
         <section
           ref={uploadSectionRef}
@@ -480,54 +523,174 @@ export default function App() {
           </div>
         )}
 
-        {/* Analysis Error Alert with Quick Retry */}
-        {analysisError && (
-          <div
-            id="analysis-error-alert"
-            className="p-6 rounded-3xl bg-rose-950/70 border border-rose-500/60 text-rose-200 space-y-4 shadow-xl"
-          >
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <div className="font-bold text-base text-rose-100">메뉴판 분석에 실패했습니다</div>
-                <div className="text-xs text-rose-300 mt-1">{analysisError}</div>
-              </div>
-            </div>
+        {/* Analysis Error Alert with Quick Retry & Mobile Key Setup */}
+        {analysisError && (() => {
+          const isKeyError =
+            analysisError.includes('GEMINI_API_KEY') ||
+            analysisError.includes('API Key') ||
+            analysisError.includes('API_KEY') ||
+            analysisError.includes('Vercel') ||
+            analysisError.includes('설정되어 있지 않습니다') ||
+            analysisError.includes('인증에 실패');
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              {uploadedImageInfo && (
-                <button
-                  id="retry-analysis-btn"
-                  onClick={handleRetryAnalysis}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2"
+          return (
+            <div
+              id="analysis-error-alert"
+              className="p-6 rounded-3xl bg-rose-950/70 border border-rose-500/60 text-rose-200 space-y-4 shadow-xl"
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-bold text-base text-rose-100">메뉴판 분석에 실패했습니다</div>
+                  <div className="text-xs text-rose-300 mt-1 leading-relaxed">{analysisError}</div>
+                </div>
+              </div>
+
+              {/* Mobile Quick Key Input Form (when API key is missing on mobile or Vercel) */}
+              {isKeyError && (
+                <div
+                  id="mobile-quick-key-card"
+                  className="p-4 rounded-2xl bg-stone-900/95 border border-amber-500/40 space-y-3 shadow-inner"
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>같은 사진으로 다시 분석하기</span>
-                </button>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                      <KeyRound className="w-4 h-4 text-amber-400" />
+                      <span>모바일 빠른 Gemini API Key 등록</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      1회 등록 시 자동 저장
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-stone-300 leading-relaxed">
+                    모바일 브라우저 환경에서는 아래 입력창에 Gemini API Key를 붙여넣으시면, 다른 설정 창으로 이동할 필요 없이 <strong>즉시 사진 분석이 시작</strong>됩니다.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        id="inline-mobile-api-key-input"
+                        type={showInlineKey ? 'text' : 'password'}
+                        value={inlineApiKey}
+                        onChange={(e) => setInlineApiKey(e.target.value)}
+                        placeholder="AIzaSy... (Gemini API Key를 붙여넣으세요)"
+                        className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3.5 py-2.5 text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-400 font-mono pr-10"
+                      />
+                      <button
+                        type="button"
+                        id="toggle-inline-key-visibility"
+                        onClick={() => setShowInlineKey(!showInlineKey)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-200 p-1"
+                        title={showInlineKey ? '숨기기' : '보기'}
+                      >
+                        {showInlineKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    <button
+                      id="save-key-and-retry-btn"
+                      onClick={() => {
+                        const trimmed = inlineApiKey.trim();
+                        if (!trimmed) {
+                          alert('Gemini API Key를 입력해 주세요.');
+                          return;
+                        }
+                        setAdminApiKey(trimmed, 'gemini');
+                        setAdminProvider('gemini');
+                        setHasCustomApiKey(true);
+                        setAnalysisError(null);
+                        setKeyToast('✅ API Key가 성공적으로 저장되었습니다! 재분석을 진행합니다.');
+                        setTimeout(() => setKeyToast(null), 4000);
+                        // Trigger immediate retry with already uploaded image
+                        handleRetryAnalysis();
+                      }}
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 shrink-0"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>키 저장하고 바로 분석하기 🚀</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px] text-stone-400 pt-1 border-t border-stone-800">
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-400 hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <span>Google AI Studio에서 무료 Key 발급 (1분 소요)</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+
+                    <button
+                      type="button"
+                      id="toggle-vercel-guide-btn"
+                      onClick={() => setShowVercelGuide(!showVercelGuide)}
+                      className="text-amber-400 hover:underline text-left"
+                    >
+                      {showVercelGuide ? '▲ Vercel 설정 가이드 접기' : '▼ Vercel 배포 시 모든 방문자 자동 적용 방법'}
+                    </button>
+                  </div>
+
+                  {showVercelGuide && (
+                    <div className="p-3.5 rounded-xl bg-stone-950/90 border border-stone-800 text-[11px] text-stone-300 space-y-1.5 leading-relaxed mt-2 animate-fade-in">
+                      <p className="font-semibold text-amber-300">
+                        💡 Vercel에 배포하여 모든 사용자에게 키 입력 없이 서비스하려면:
+                      </p>
+                      <ol className="list-decimal list-inside space-y-1 text-stone-400">
+                        <li>
+                          <span className="text-stone-200">Vercel 대시보드</span>(vercel.com)에서 해당 프로젝트를 클릭합니다.
+                        </li>
+                        <li>
+                          <strong className="text-stone-200">Settings &gt; Environment Variables</strong> 메뉴로 이동합니다.
+                        </li>
+                        <li>
+                          Key에 <code className="bg-stone-900 text-amber-300 px-1 py-0.5 rounded font-mono">GEMINI_API_KEY</code>, Value에 발급받은 키를 넣고 <span className="text-emerald-400 font-bold">Save</span>를 누릅니다.
+                        </li>
+                        <li>
+                          <strong className="text-stone-200">Deployments</strong> 탭에서 최신 빌드의 <span className="text-stone-200 font-bold">Redeploy</span>를 클릭하면 완료됩니다.
+                        </li>
+                      </ol>
+                    </div>
+                  )}
+                </div>
               )}
 
-              <button
-                id="open-settings-from-error-btn"
-                onClick={() => setIsAdminModalOpen(true)}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2"
-              >
-                <Settings className="w-4 h-4" />
-                <span>API Key / 모델 설정</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {uploadedImageInfo && (
+                  <button
+                    id="retry-analysis-btn"
+                    onClick={handleRetryAnalysis}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>같은 사진으로 다시 분석하기</span>
+                  </button>
+                )}
 
-              <button
-                id="reupload-analysis-btn"
-                onClick={() => {
-                  setAnalysisError(null);
-                  uploadSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold rounded-xl transition"
-              >
-                다른 사진으로 다시 업로드
-              </button>
+                <button
+                  id="open-settings-from-error-btn"
+                  onClick={() => setIsAdminModalOpen(true)}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>API Key / 모델 설정</span>
+                </button>
+
+                <button
+                  id="reupload-analysis-btn"
+                  onClick={() => {
+                    setAnalysisError(null);
+                    uploadSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold rounded-xl transition"
+                >
+                  다른 사진으로 다시 업로드
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Menu Results Display */}
         {currentResult && !isAnalyzing && (

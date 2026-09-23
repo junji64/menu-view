@@ -60,9 +60,9 @@ export function getAdminPreferredModel(targetProvider?: LLMProvider): string {
     if (provider === 'openai') {
       return localStorage.getItem(ADMIN_OPENAI_MODEL_STORAGE) || 'gpt-4o';
     }
-    return localStorage.getItem(ADMIN_GEMINI_MODEL_STORAGE) || 'gemini-3.8-flash';
+    return localStorage.getItem(ADMIN_GEMINI_MODEL_STORAGE) || 'gemini-2.5-flash';
   } catch {
-    return targetProvider === 'openai' ? 'gpt-4o' : 'gemini-3.8-flash';
+    return targetProvider === 'openai' ? 'gpt-4o' : 'gemini-2.5-flash';
   }
 }
 
@@ -74,6 +74,58 @@ export function setAdminPreferredModel(model: string, targetProvider?: LLMProvid
   } catch {
     // Ignore storage errors
   }
+}
+
+/**
+ * Automatically import API key if provided via URL search param or hash
+ * (Useful for mobile phone setup via QR code or direct share)
+ */
+export function syncApiKeyFromUrl(): { synced: boolean; provider?: LLMProvider } {
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.startsWith('#')
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    const hashParams = new URLSearchParams(hash);
+
+    const geminiKey =
+      searchParams.get('geminiKey') ||
+      hashParams.get('geminiKey') ||
+      hashParams.get('apiKey') ||
+      searchParams.get('apiKey');
+
+    const openAiKey = searchParams.get('openAiKey') || hashParams.get('openAiKey');
+
+    if (geminiKey && geminiKey.trim()) {
+      setAdminApiKey(geminiKey.trim(), 'gemini');
+      setAdminProvider('gemini');
+      // Clean URL hash/params without full reload to protect user credentials
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      return { synced: true, provider: 'gemini' };
+    }
+
+    if (openAiKey && openAiKey.trim()) {
+      setAdminApiKey(openAiKey.trim(), 'openai');
+      setAdminProvider('openai');
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      return { synced: true, provider: 'openai' };
+    }
+  } catch {
+    // Ignore
+  }
+  return { synced: false };
+}
+
+/**
+ * Generate a mobile sync link carrying the current API key in the URL hash
+ */
+export function getMobileSyncUrl(provider: LLMProvider = 'gemini'): string {
+  const key = getAdminApiKey(provider);
+  if (!key) return window.location.origin;
+  const param = provider === 'openai' ? 'openAiKey' : 'geminiKey';
+  return `${window.location.origin}/#${param}=${encodeURIComponent(key)}`;
 }
 
 function getRequestHeaders(): Record<string, string> {

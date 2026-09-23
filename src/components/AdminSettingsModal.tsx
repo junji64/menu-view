@@ -13,7 +13,11 @@ import {
   Cpu,
   Sparkles,
   Zap,
-  Layers
+  Layers,
+  Smartphone,
+  QrCode,
+  Copy,
+  Check
 } from 'lucide-react';
 import {
   getAdminProvider,
@@ -23,6 +27,7 @@ import {
   getAdminPreferredModel,
   setAdminPreferredModel,
   verifyAdminApiKey,
+  getMobileSyncUrl,
 } from '../services/api';
 import { LLMProvider, LLMModelOption } from '../types';
 
@@ -34,11 +39,11 @@ interface AdminSettingsModalProps {
 
 const GEMINI_MODELS: LLMModelOption[] = [
   {
-    id: 'gemini-3.8-flash',
-    name: 'Gemini 3.8 Flash',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
     provider: 'gemini',
-    description: '최신 플래시 모델로 심층 추론 및 다국어 메뉴판 시각 분석 능력이 가장 탁월합니다.',
-    badge: '추천',
+    description: '서버 혼잡(503) 없이 가장 안정적이고 뛰어난 다국어 메뉴판 시각 분석을 제공합니다.',
+    badge: '추천/안정적',
   },
   {
     id: 'gemini-3.1-flash-lite',
@@ -48,11 +53,18 @@ const GEMINI_MODELS: LLMModelOption[] = [
     badge: '초고속',
   },
   {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    provider: 'gemini',
+    description: '최신 플래시 모델로 심층 추론 및 다국어 메뉴판 시각 분석 능력이 탁월합니다.',
+    badge: '최신',
+  },
+  {
     id: 'gemini-flash-latest',
     name: 'Gemini Flash Latest',
     provider: 'gemini',
     description: '항상 최신 버전의 Flash 모델을 자동으로 적용합니다.',
-    badge: '안정',
+    badge: '기본',
   },
 ];
 
@@ -112,6 +124,8 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
     message: string;
   } | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [showMobileQr, setShowMobileQr] = useState(false);
+  const [copiedSyncLink, setCopiedSyncLink] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -123,6 +137,8 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
       setSelectedOpenaiModel(getAdminPreferredModel('openai'));
       setVerifyResult(null);
       setSavedSuccess(false);
+      setShowMobileQr(false);
+      setCopiedSyncLink(false);
     }
   }, [isOpen]);
 
@@ -506,6 +522,77 @@ export const AdminSettingsModal: React.FC<AdminSettingsModalProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Mobile Sync Section */}
+          {hasCurrentCustomKey && (
+            <div className="p-4 rounded-2xl bg-stone-950/90 border border-stone-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-stone-200">
+                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                  <span>스마트폰/모바일 기기로 설정 전달</span>
+                </div>
+                <button
+                  type="button"
+                  id="toggle-mobile-qr-btn"
+                  onClick={() => setShowMobileQr(!showMobileQr)}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>{showMobileQr ? 'QR 코드 닫기' : 'QR 코드 보기'}</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-stone-400 leading-relaxed">
+                스마트폰에서 긴 API 키를 직접 입력할 필요 없이, 아래 링크를 복사하여 카카오톡/메모장 등으로 스마트폰에서 열거나 카메라로 QR 코드를 스캔하세요.
+              </p>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={getMobileSyncUrl(selectedProvider)}
+                  className="flex-1 bg-stone-900 border border-stone-800 rounded-xl px-3 py-2 text-[11px] text-stone-300 font-mono select-all truncate"
+                />
+                <button
+                  type="button"
+                  id="copy-mobile-sync-link-btn"
+                  onClick={() => {
+                    navigator.clipboard.writeText(getMobileSyncUrl(selectedProvider));
+                    setCopiedSyncLink(true);
+                    setTimeout(() => setCopiedSyncLink(false), 3000);
+                  }}
+                  className="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-100 text-xs font-semibold rounded-xl border border-stone-700 flex items-center gap-1.5 transition shrink-0"
+                >
+                  {copiedSyncLink ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400">복사 완료!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>링크 복사</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {showMobileQr && (
+                <div className="pt-2 flex flex-col items-center justify-center p-4 bg-white rounded-2xl">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                      getMobileSyncUrl(selectedProvider)
+                    )}`}
+                    alt="모바일 연동 QR 코드"
+                    className="w-44 h-44 object-contain rounded-xl"
+                  />
+                  <p className="text-[11px] text-stone-800 font-semibold mt-2.5">
+                    스마트폰 기본 카메라로 비추면 바로 열립니다
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

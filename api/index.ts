@@ -152,12 +152,25 @@ function matchCuratedPhoto(name1: string = "", name2: string = ""): string {
   return "";
 }
 
+// Retrieve Gemini API key from custom input or environment variable aliases
+function getGeminiApiKey(customKey?: string): string {
+  const key =
+    customKey?.trim() ||
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_API_KEY?.trim() ||
+    process.env.GOOGLE_GENAI_API_KEY?.trim() ||
+    process.env.VITE_GEMINI_API_KEY?.trim() ||
+    process.env.API_KEY?.trim() ||
+    "";
+  return key;
+}
+
 // Lazy GoogleGenAI client with custom admin API key support
 function getGeminiClient(customKey?: string): GoogleGenAI {
-  const apiKey = customKey?.trim() || process.env.GEMINI_API_KEY;
+  const apiKey = getGeminiApiKey(customKey);
   if (!apiKey) {
     throw new Error(
-      "GEMINI_API_KEY가 서버(Vercel 환경변수)에 설정되어 있지 않습니다. Vercel 대시보드(Settings > Environment Variables)에 GEMINI_API_KEY를 추가하시거나, 화면 우측 상단 '관리자 설정(⚙️)'에서 직접 API Key를 입력해 주세요."
+      "GEMINI_API_KEY가 서버(Vercel 환경변수)에 설정되어 있지 않습니다. Vercel 대시보드(Settings > Environment Variables)에 GEMINI_API_KEY를 추가하시거나, 모바일 화면 아래 'API Key 등록' 또는 우측 상단 '관리자 설정(⚙️)'에서 직접 API Key를 입력해 주세요."
     );
   }
   return new GoogleGenAI({
@@ -199,10 +212,11 @@ async function generateContentWithRetryAndFallback(
         console.warn(`[Gemini Warning] Model '${model}' round ${round} failed: ${msg}`);
 
         // If custom key failed due to invalid API key/auth error, and system key exists, fall back to system key
+        const sysKey = getGeminiApiKey();
         if (
           customKeyUsed &&
-          process.env.GEMINI_API_KEY &&
-          customKeyUsed !== process.env.GEMINI_API_KEY &&
+          sysKey &&
+          customKeyUsed !== sysKey &&
           (msg.includes("API key not valid") ||
             msg.includes("API_KEY_INVALID") ||
             msg.includes("400") ||
@@ -213,7 +227,7 @@ async function generateContentWithRetryAndFallback(
           console.warn("[Gemini Auth Fallback] Custom API key rejected. Falling back to default system key...");
           try {
             const fallbackAi = new GoogleGenAI({
-              apiKey: process.env.GEMINI_API_KEY,
+              apiKey: sysKey,
               httpOptions: { headers: { "User-Agent": "aistudio-build" } },
             });
             const fallbackRes = await fallbackAi.models.generateContent({
@@ -424,16 +438,22 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z0-9+-]+;base64,/, "");
 
     const providerHeader = (req.headers["x-llm-provider"] as string) || req.body.provider;
+    const authHeader = req.headers["authorization"] as string;
+    const bearerKey = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : undefined;
+
     const customApiKey =
       (req.headers["x-llm-api-key"] as string) ||
       (req.headers["x-openai-api-key"] as string) ||
       (req.headers["x-gemini-api-key"] as string) ||
-      (req.body.customApiKey as string);
+      bearerKey ||
+      (req.body.customApiKey as string) ||
+      (req.body.apiKey as string);
     const customModel =
       (req.headers["x-llm-model"] as string) ||
       (req.headers["x-openai-model"] as string) ||
       (req.headers["x-gemini-model"] as string) ||
-      (req.body.customModel as string);
+      (req.body.customModel as string) ||
+      (req.body.model as string);
 
     const isOpenAI =
       providerHeader === "openai" ||
@@ -742,6 +762,11 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
 
     let statusCode = 500;
     let userFriendlyMsg = msg;
+    const isMissingKey =
+      msg.includes("GEMINI_API_KEY") ||
+      msg.includes("OPENAI_API_KEY") ||
+      msg.includes("환경변수") ||
+      msg.includes("설정되어 있지 않습니다");
 
     if (isApiKeyError) {
       statusCode = 400;
@@ -757,6 +782,13 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
     return res.status(statusCode).json({
       success: false,
       error: userFriendlyMsg,
+      errorType: isMissingKey
+        ? "MISSING_API_KEY"
+        : isApiKeyError
+        ? "INVALID_API_KEY"
+        : isHighDemand
+        ? "HIGH_DEMAND"
+        : "GENERAL_ERROR",
     });
   }
 });
