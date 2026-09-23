@@ -22,25 +22,27 @@ export const OrderSheetModal: React.FC<OrderSheetModalProps> = ({
 }) => {
   const [isPresentationMode, setIsPresentationMode] = useState(false);
 
-  const totalKRW = orders.reduce(
-    (sum, item) => sum + item.dish.priceKRW * item.quantity,
+  const orderList = Array.isArray(orders) ? orders : [];
+
+  const totalKRW = orderList.reduce(
+    (sum, item) => sum + (item.dish.priceKRW || 0) * (item.quantity || 1),
     0
   );
 
-  const totalOriginalEstimated = orders.reduce((sum, item) => {
+  const totalOriginalEstimated = orderList.reduce((sum, item) => {
     // Extract numerical value from priceOriginal
-    const num = parseFloat(item.dish.priceOriginal.replace(/[^0-9.]/g, '')) || 0;
-    return sum + num * item.quantity;
+    const num = parseFloat((item.dish.priceOriginal || '').replace(/[^0-9.]/g, '')) || 0;
+    return sum + num * (item.quantity || 1);
   }, 0);
 
   const handleSpeakAll = () => {
-    const text = orders
-      .map((item) => `${item.dish.originalName} ${item.quantity}`)
+    const text = orderList
+      .map((item) => `${item.dish.originalName || ''} ${item.quantity || 1}`)
       .join(', ');
-    speakText(text, restaurant.languageCode);
+    speakText(text, restaurant?.languageCode || 'en-US');
   };
 
-  if (orders.length === 0) {
+  if (orderList.length === 0) {
     return (
       <div
         id="order-sheet-modal-overlay"

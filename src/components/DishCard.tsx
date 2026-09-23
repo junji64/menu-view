@@ -173,17 +173,17 @@ export const DishCard: React.FC<DishCardProps> = ({
           </div>
 
           {/* Spice indicator on image if spicy */}
-          {dish.spiceLevel > 0 && (
+          {(dish.spiceLevel || 0) > 0 && (
             <div className="absolute bottom-2 left-2.5 flex items-center gap-1 bg-rose-950/80 backdrop-blur-md border border-rose-500/30 px-2 py-0.5 rounded-md text-[11px] text-rose-300 font-medium">
               <Flame className="w-3 h-3 text-rose-400" />
-              <span>{'🌶️'.repeat(dish.spiceLevel)}</span>
+              <span>{'🌶️'.repeat(dish.spiceLevel || 1)}</span>
             </div>
           )}
 
           {/* Price tag */}
           <div className="absolute bottom-2 right-2.5 text-right bg-stone-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-stone-700">
-            <div className="text-xs font-bold text-amber-300">{dish.priceOriginal}</div>
-            <div className="text-[10px] text-stone-400">약 {dish.priceKRW.toLocaleString()}원</div>
+            <div className="text-xs font-bold text-amber-300">{dish.priceOriginal || ''}</div>
+            <div className="text-[10px] text-stone-400">약 {(dish.priceKRW || 0).toLocaleString()}원</div>
           </div>
         </div>
       ) : (
@@ -191,7 +191,7 @@ export const DishCard: React.FC<DishCardProps> = ({
         <div className="relative w-full bg-gradient-to-br from-stone-900 via-stone-850 to-stone-950 p-3.5 border-b border-stone-700/60">
           <div className="flex items-center justify-between">
             <span className="px-2.5 py-1 rounded-full bg-stone-800 text-emerald-400 text-xs font-medium border border-stone-700">
-              {dish.category}
+              {dish.category || '기타'}
             </span>
 
             <div className="flex items-center gap-1.5">
@@ -242,10 +242,10 @@ export const DishCard: React.FC<DishCardProps> = ({
               <span>사진 미등록 메뉴</span>
             </span>
 
-            {dish.spiceLevel > 0 && (
+            {(dish.spiceLevel || 0) > 0 && (
               <span className="text-rose-400 font-medium text-[11px] flex items-center gap-0.5">
                 <Flame className="w-3 h-3" />
-                <span>{'🌶️'.repeat(dish.spiceLevel)}</span>
+                <span>{'🌶️'.repeat(dish.spiceLevel || 1)}</span>
               </span>
             )}
           </div>
@@ -275,7 +275,7 @@ export const DishCard: React.FC<DishCardProps> = ({
           {/* Phonetic Pronunciation in Korean */}
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-xs text-emerald-300 mb-2">
             <span className="text-[11px] text-emerald-400/90 font-medium">원어 발음:</span>
-            <span className="font-extrabold text-emerald-300">[{dish.originalPronunciation}]</span>
+            <span className="font-extrabold text-emerald-300">[{dish.originalPronunciation || dish.koreanName}]</span>
           </div>
 
           {/* Korean Translated Name */}
@@ -287,12 +287,12 @@ export const DishCard: React.FC<DishCardProps> = ({
           <div className="mt-2 flex items-center justify-between bg-stone-900/90 px-2.5 py-1.5 rounded-xl border border-stone-700/60">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-stone-400">현지:</span>
-              <span className="text-xs font-bold text-amber-300">{dish.priceOriginal}</span>
+              <span className="text-xs font-bold text-amber-300">{dish.priceOriginal || '-'}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-emerald-400">환율 적용:</span>
               <span className="text-xs font-extrabold text-white">
-                약 {dish.priceKRW.toLocaleString()}원
+                약 {(dish.priceKRW || 0).toLocaleString()}원
               </span>
             </div>
           </div>
@@ -306,7 +306,7 @@ export const DishCard: React.FC<DishCardProps> = ({
         {/* Dietary & Ingredient Tags */}
         <div className="space-y-2 pt-2 border-t border-stone-700/60">
           <div className="flex flex-wrap gap-1">
-            {dish.dietaryTags.slice(0, 3).map((tag, idx) => (
+            {(dish.dietaryTags || []).slice(0, 3).map((tag, idx) => (
               <span
                 key={idx}
                 className="px-2 py-0.5 rounded-md bg-stone-900/80 text-[11px] text-stone-300 border border-stone-700/50"

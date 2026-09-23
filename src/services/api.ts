@@ -222,7 +222,31 @@ export async function analyzeMenuImage(
     throw new Error(result.error || '메뉴 데이터 분석에 실패했습니다.');
   }
 
-  return result.data;
+  const data = result.data;
+  data.categories = Array.isArray(data.categories) ? data.categories : [];
+  data.dishes = Array.isArray(data.dishes)
+    ? data.dishes.map((dish: any, idx: number) => ({
+        ...dish,
+        id: dish.id || `dish-${idx + 1}`,
+        category: dish.category || '기타',
+        originalName: dish.originalName || '',
+        koreanName: dish.koreanName || dish.originalName || '메뉴',
+        originalPronunciation:
+          dish.originalPronunciation || dish.koreanName || dish.originalName || '',
+        koreanDescription: dish.koreanDescription || '',
+        priceOriginal: dish.priceOriginal || '',
+        priceKRW:
+          typeof dish.priceKRW === 'number' && !isNaN(dish.priceKRW) ? dish.priceKRW : 0,
+        spiceLevel:
+          typeof dish.spiceLevel === 'number' && !isNaN(dish.spiceLevel) ? dish.spiceLevel : 0,
+        ingredients: Array.isArray(dish.ingredients) ? dish.ingredients : [],
+        dietaryTags: Array.isArray(dish.dietaryTags) ? dish.dietaryTags : [],
+        allergens: Array.isArray(dish.allergens) ? dish.allergens : [],
+        orderPhrase: dish.orderPhrase || dish.originalName || '',
+      }))
+    : [];
+
+  return data;
 }
 
 export async function generateFoodImage(

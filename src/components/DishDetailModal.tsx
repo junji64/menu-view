@@ -265,9 +265,9 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({
             <div className="flex items-baseline justify-between flex-wrap gap-2 pt-1 border-t border-stone-800">
               <h2 className="text-2xl font-extrabold text-stone-100">{dish.koreanName}</h2>
               <div className="text-right">
-                <div className="text-xl font-bold text-amber-400">{dish.priceOriginal}</div>
+                <div className="text-xl font-bold text-amber-400">{dish.priceOriginal || ''}</div>
                 <div className="text-xs text-emerald-300 font-bold">
-                  한화 환산: 약 {dish.priceKRW.toLocaleString()}원
+                  한화 환산: 약 {(dish.priceKRW || 0).toLocaleString()}원
                 </div>
               </div>
             </div>
@@ -334,7 +334,7 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({
               주요 식재료 (Ingredients)
             </h4>
             <div className="flex flex-wrap gap-2">
-              {dish.ingredients.map((ing, idx) => (
+              {(dish.ingredients || []).map((ing, idx) => (
                 <span
                   key={idx}
                   className="px-3 py-1 rounded-xl bg-stone-800 text-xs font-medium text-stone-200 border border-stone-700"
@@ -450,7 +450,7 @@ export const DishDetailModal: React.FC<DishDetailModalProps> = ({
               <>
                 <ShoppingBag className="w-4 h-4" />
                 <span>
-                  주문표에 담기 • {(dish.priceKRW * quantity).toLocaleString()}원
+                  주문표에 담기 • {((dish.priceKRW || 0) * quantity).toLocaleString()}원
                 </span>
               </>
             )}

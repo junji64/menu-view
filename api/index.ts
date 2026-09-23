@@ -48,9 +48,10 @@ const STANDARD_EXCHANGE_RATES: Record<string, number> = {
 
 // Priority candidate models to bypass 503 high demand spikes with fallback
 const CANDIDATE_MODELS = [
-  "gemini-3.8-flash",
+  "gemini-2.5-flash",
   "gemini-3.1-flash-lite",
   "gemini-flash-latest",
+  "gemini-3.8-flash",
 ];
 
 // Curated authentic culinary image library for instant 0ms matching
@@ -663,50 +664,60 @@ app.post(["/api/analyze-menu", "/analyze-menu"], async (req: Request, res: Respo
       }
     }
 
-    // Process and validate dishes: guarantee Korean pronunciation, accurate KRW price, and representative web image
-    if (parsedData.dishes && Array.isArray(parsedData.dishes)) {
-      await Promise.all(
-        parsedData.dishes.map(async (dish: any, index: number) => {
-          if (!dish.id) dish.id = `dish-${index + 1}`;
+    // Process and validate dishes: guarantee arrays, Korean pronunciation, accurate KRW price, and representative web image
+    parsedData.categories = Array.isArray(parsedData.categories) ? parsedData.categories : [];
+    parsedData.dishes = Array.isArray(parsedData.dishes) ? parsedData.dishes : [];
 
-          // 1. Ensure Korean pronunciation is present
-          if (!dish.originalPronunciation || dish.originalPronunciation.trim() === "") {
-            dish.originalPronunciation = dish.koreanName || dish.originalName;
-          }
+    await Promise.all(
+      parsedData.dishes.map(async (dish: any, index: number) => {
+        if (!dish.id) dish.id = `dish-${index + 1}`;
+        dish.category = dish.category || "기타";
+        dish.originalName = dish.originalName || "";
+        dish.koreanName = dish.koreanName || dish.originalName || "메뉴";
+        dish.ingredients = Array.isArray(dish.ingredients) ? dish.ingredients : [];
+        dish.dietaryTags = Array.isArray(dish.dietaryTags) ? dish.dietaryTags : [];
+        dish.allergens = Array.isArray(dish.allergens) ? dish.allergens : [];
+        dish.spiceLevel = typeof dish.spiceLevel === "number" && !isNaN(dish.spiceLevel) ? dish.spiceLevel : 0;
+        dish.orderPhrase = dish.orderPhrase || dish.originalName || "";
 
-          // 2. Ensure priceKRW is accurately calculated with the exchange rate
-          if (!dish.priceKRW || dish.priceKRW <= 0) {
-            const numMatch = dish.priceOriginal?.match(/[\d,]+(\.\d+)?/);
-            if (numMatch) {
-              const rawNum = parseFloat(numMatch[0].replace(/,/g, ""));
-              if (!isNaN(rawNum) && rawNum > 0) {
-                dish.priceKRW = Math.round(rawNum * currentRate);
-              }
+        // 1. Ensure Korean pronunciation is present
+        if (!dish.originalPronunciation || dish.originalPronunciation.trim() === "") {
+          dish.originalPronunciation = dish.koreanName || dish.originalName;
+        }
+
+        // 2. Ensure priceKRW is accurately calculated with the exchange rate
+        if (!dish.priceKRW || dish.priceKRW <= 0) {
+          const numMatch = dish.priceOriginal?.match(/[\d,]+(\.\d+)?/);
+          if (numMatch) {
+            const rawNum = parseFloat(numMatch[0].replace(/,/g, ""));
+            if (!isNaN(rawNum) && rawNum > 0) {
+              dish.priceKRW = Math.round(rawNum * currentRate);
             }
           }
+        }
+        dish.priceKRW = typeof dish.priceKRW === "number" && !isNaN(dish.priceKRW) ? dish.priceKRW : 0;
 
-          // 3. If priceOriginal is just a number, attach currency symbol
-          if (dish.priceOriginal && !isNaN(Number(dish.priceOriginal.trim()))) {
-            const sym = parsedData.restaurant?.currencySymbol || parsedData.restaurant?.currencyCode || "";
-            dish.priceOriginal = `${sym} ${dish.priceOriginal}`.trim();
-          }
+        // 3. If priceOriginal is just a number, attach currency symbol
+        if (dish.priceOriginal && !isNaN(Number(dish.priceOriginal.trim()))) {
+          const sym = parsedData.restaurant?.currencySymbol || parsedData.restaurant?.currencyCode || "";
+          dish.priceOriginal = `${sym} ${dish.priceOriginal}`.trim();
+        }
 
-          // 4. Ensure every dish has a meaningful, high quality Korean description
-          if (!dish.koreanDescription || dish.koreanDescription.trim().length < 15) {
-            const ingText = dish.ingredients && dish.ingredients.length > 0
-              ? `주요 식재료인 ${dish.ingredients.slice(0, 3).join(', ')}의 깊은 풍미를 살려 조리되었습니다.`
-              : '현지 고유의 조리법으로 식재료의 감칠맛과 풍미를 균형감 있게 담아냈습니다.';
-            dish.koreanDescription = `${dish.koreanName || dish.originalName}은(는) 현지 식당에서 사랑받는 대표적인 메뉴입니다. ${ingText} 기호에 맞춰 소스나 곁들임 메뉴와 함께 즐기시면 더욱 맛있습니다.`;
-          }
+        // 4. Ensure every dish has a meaningful, high quality Korean description
+        if (!dish.koreanDescription || dish.koreanDescription.trim().length < 15) {
+          const ingText = dish.ingredients && dish.ingredients.length > 0
+            ? `주요 식재료인 ${dish.ingredients.slice(0, 3).join(', ')}의 깊은 풍미를 살려 조리되었습니다.`
+            : '현지 고유의 조리법으로 식재료의 감칠맛과 풍미를 균형감 있게 담아냈습니다.';
+          dish.koreanDescription = `${dish.koreanName || dish.originalName}은(는) 현지 식당에서 사랑받는 대표적인 메뉴입니다. ${ingText} 기호에 맞춰 소스나 곁들임 메뉴와 함께 즐기시면 더욱 맛있습니다.`;
+        }
 
-          // 5. Assign authentic representative food image only if a genuine curated match exists
-          // User preference: if no appropriate image is found, keep it as no-image ("")
-          if (!dish.imageUrl || dish.imageUrl.trim() === "") {
-            dish.imageUrl = matchCuratedPhoto(dish.originalName, dish.koreanName) || "";
-          }
-        })
-      );
-    }
+        // 5. Assign authentic representative food image only if a genuine curated match exists
+        // User preference: if no appropriate image is found, keep it as no-image ("")
+        if (!dish.imageUrl || dish.imageUrl.trim() === "") {
+          dish.imageUrl = matchCuratedPhoto(dish.originalName, dish.koreanName) || "";
+        }
+      })
+    );
 
     return res.json({
       success: true,

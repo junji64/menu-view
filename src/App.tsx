@@ -228,11 +228,11 @@ export default function App() {
       // Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const matchOriginal = dish.originalName.toLowerCase().includes(query);
-        const matchKorean = dish.koreanName.toLowerCase().includes(query);
-        const matchPronun = dish.originalPronunciation.toLowerCase().includes(query);
-        const matchDesc = dish.koreanDescription.toLowerCase().includes(query);
-        const matchIng = dish.ingredients.some((ing) => ing.toLowerCase().includes(query));
+        const matchOriginal = (dish.originalName || '').toLowerCase().includes(query);
+        const matchKorean = (dish.koreanName || '').toLowerCase().includes(query);
+        const matchPronun = (dish.originalPronunciation || '').toLowerCase().includes(query);
+        const matchDesc = (dish.koreanDescription || '').toLowerCase().includes(query);
+        const matchIng = (dish.ingredients || []).some((ing) => (ing || '').toLowerCase().includes(query));
 
         if (!matchOriginal && !matchKorean && !matchPronun && !matchDesc && !matchIng) {
           return false;
@@ -241,30 +241,31 @@ export default function App() {
 
       // Dietary tag filter
       if (selectedDietTag) {
-        if (selectedDietTag === 'non-spicy' && dish.spiceLevel > 0) return false;
+        const tags = dish.dietaryTags || [];
+        if (selectedDietTag === 'non-spicy' && (dish.spiceLevel || 0) > 0) return false;
         if (
           selectedDietTag === 'vegetarian' &&
-          !dish.dietaryTags.some((t) => t.includes('채식') || t.includes('비건'))
+          !tags.some((t) => t && (t.includes('채식') || t.includes('비건')))
         )
           return false;
         if (
           selectedDietTag === 'seafood' &&
-          !dish.dietaryTags.some((t) => t.includes('해산물') || t.includes('생선') || t.includes('새우'))
+          !tags.some((t) => t && (t.includes('해산물') || t.includes('생선') || t.includes('새우')))
         )
           return false;
         if (
           selectedDietTag === 'pork' &&
-          !dish.dietaryTags.some((t) => t.includes('돼지고기'))
+          !tags.some((t) => t && t.includes('돼지고기'))
         )
           return false;
         if (
           selectedDietTag === 'beef' &&
-          !dish.dietaryTags.some((t) => t.includes('소고기'))
+          !tags.some((t) => t && t.includes('소고기'))
         )
           return false;
         if (
           selectedDietTag === 'dairy' &&
-          !dish.dietaryTags.some((t) => t.includes('유제품') || t.includes('치즈') || t.includes('달걀'))
+          !tags.some((t) => t && (t.includes('유제품') || t.includes('치즈') || t.includes('달걀')))
         )
           return false;
       }
@@ -559,7 +560,7 @@ export default function App() {
                         ✅ 방금 업로드된 메뉴판 사진 분석 결과
                       </span>
                       <span className="text-[11px] text-stone-400 bg-stone-900/80 px-2 py-0.5 rounded border border-stone-800">
-                        {currentResult.dishes.length}개 메뉴 추출됨
+                        {currentResult?.dishes?.length || 0}개 메뉴 추출됨
                       </span>
                     </div>
                     <p className="text-xs text-stone-300 mt-0.5">
@@ -598,22 +599,22 @@ export default function App() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
-                      {currentResult.restaurant.cuisineType}
+                      {currentResult?.restaurant?.cuisineType || '다이닝'}
                     </span>
                     <span className="px-3 py-1 rounded-full bg-stone-800 text-stone-300 text-xs font-medium border border-stone-700">
-                      원어: {currentResult.restaurant.sourceLanguage}
+                      원어: {currentResult?.restaurant?.sourceLanguage || '현지어'}
                     </span>
                     <span className="px-3 py-1 rounded-full bg-amber-950/80 text-amber-300 text-xs font-medium border border-amber-500/30">
-                      환율 기준: 1 {currentResult.restaurant.currencyCode} ≈ 약 {currentResult.restaurant.exchangeRateToKRW?.toLocaleString() || 1}원 (원화 환산 적용)
+                      환율 기준: 1 {currentResult?.restaurant?.currencyCode || ''} ≈ 약 {currentResult?.restaurant?.exchangeRateToKRW?.toLocaleString() || 1}원 (원화 환산 적용)
                     </span>
                   </div>
 
                   <h1 className="text-2xl sm:text-3xl font-black text-stone-100">
-                    {currentResult.restaurant.name}
+                    {currentResult?.restaurant?.name || '현지 레스토랑'}
                   </h1>
 
                   <p className="text-sm text-stone-300 leading-relaxed max-w-4xl">
-                    {currentResult.restaurant.summary}
+                    {currentResult?.restaurant?.summary || '메뉴판 요리 목록입니다.'}
                   </p>
                 </div>
 
@@ -631,15 +632,15 @@ export default function App() {
 
             {/* Filter & Search Bar */}
             <FilterBar
-              categories={currentResult.categories || []}
+              categories={currentResult?.categories || []}
               selectedCategory={selectedCategory}
               onSelectCategory={setSelectedCategory}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               selectedDietTag={selectedDietTag}
               onSelectDietTag={setSelectedDietTag}
-              totalDishes={currentResult.dishes.length}
-              filteredCount={filteredDishes.length}
+              totalDishes={currentResult?.dishes?.length || 0}
+              filteredCount={filteredDishes?.length || 0}
             />
 
             {/* Dishes Grid */}

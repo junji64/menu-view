@@ -69,7 +69,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       </div>
 
       {/* Category Pills */}
-      {categories.length > 0 && (
+      {categories && categories.length > 0 && (
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           <button
             id="cat-all-btn"
@@ -82,7 +82,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           >
             전체 카테고리
           </button>
-          {categories.map((cat) => (
+          {(categories || []).map((cat) => (
             <button
               key={cat}
               id={`cat-btn-${cat.replace(/\s+/g, '-')}`}
